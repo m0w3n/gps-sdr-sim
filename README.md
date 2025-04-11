@@ -1,191 +1,70 @@
-# GPS-SDR-SIM
+# 环境搭建
 
-GPS-SDR-SIM generates GPS baseband signal data streams, which can be converted 
-to RF using software-defined radio (SDR) platforms, such as 
-[ADALM-Pluto](https://wiki.analog.com/university/tools/pluto), [bladeRF](http://nuand.com/), [HackRF](https://github.com/mossmann/hackrf/wiki), and [USRP](http://www.ettus.com/).
-
-### Windows build instructions
-
-1. Start Visual Studio.
-2. Create an empty project for a console application.
-3. On the Solution Explorer at right, add "gpssim.c" and "getopt.c" to the Souce Files folder.
-4. Select "Release" in Solution Configurations drop-down list.
-5. Build the solution.
-
-### Building with GCC
+ubuntu 22.04
 
 ```
-$ gcc gpssim.c -lm -O3 -o gps-sdr-sim
+sudo apt-get install git build-essential cmake libusb-1.0-0-dev liblog4cpp5-dev libboost-dev libboost-system-dev libboost-thread-dev libboost-program-options-dev swig pkg-config libfftw3-dev
+
+sudo apt-get update
+sudo apt-get upgrade
+
+sudo apt-get install gnuradio gnuradio-dev gr-iqbal gr-osmosdr
+sudo apt-get install hackrf libhackrf-dev
+sudo apt-get install gqrx-sdr
+
+# sudo apt-get remove --auto-remove hackrf
 ```
 
-### Using bigger user motion files
+# GPS-SDR-SIM 编译
 
-In order to use user motion files with more than 30000 samples (at 10Hz), the `USER_MOTION_SIZE`
-variable can be set to the maximum time of the user motion file in seconds. It is advisable to do
-this using make so gps-sdr-bin can update the size when needed. e.g:
+本仓库是官方项目：https://github.com/osqzss/gps-sdr-sim 的克隆，增加了GPS动态欺骗的 ecjtu 操场绕圈坐标。
 
 ```
-$ make USER_MOTION_SIZE=4000
+git clone https://github.com/m0w3n/gps-sdr-sim.git
+cd gps-sdr-sim
+gcc gpssim.c -lm -O3 -o gps-sdr-sim
 ```
 
-This variable can also be set when compiling directly with GCC:
+编译完成后，你当前文件夹下就会出现可执行程序gps-sdr-sim。
+
+# 星历下载
+
+进入武大IGS中心：[武汉大学IGS数据中心 (gnsswhu.cn)](http://www.igs.gnsswhu.cn/index.php)，选择广播星历，选择一个日期区间就可以下载；天数越大越近。下载N文件：brdc0970.25n.gz
+
+- 097天
+- 25年
+
+# 生成GPS数据
+
+准备一个想要模拟的经纬度，如：115.870908,28.736908（华东交大理学院）
+
+可以使用地图工具获得想要的坐标：[坐标拾取器 | 高德地图API](https://lbs.amap.com/tools/picker)
+
+https://tool.lu/coordinate/、http://api.map.baidu.com/lbsapi/getpoint/index.html
+
+输入命令（如果出现段错误，多试几次）：
 
 ```
-$ gcc gpssim.c -lm -O3 -o gps-sdr-sim -DUSER_MOTION_SIZE=4000
+# 静态欺骗，固定点
+./gps-sdr-sim -e brdc0970.25n -l 28.736908,115.870908,100 -b 8 -o ./gpssim.bin
+# 动态欺骗，绕圈点
+./gps-sdr-sim -e brdc0970.25n -x circle_ecjtu.csv -b 8 -o ./gpssim_circle_ecjtu.bin
 ```
 
-### Generating the GPS signal file
+- -e：指定RINEX格式GPS导航电文文件
+- -l：指定经纬度和海拔（静态模式）
+- -x：lat、lon、height格式的用户运动文件（动态模式）
+- -b：指定采样精度（hackrf为8，blader为16）（不需要改）
+- -o：生成bin文件的位置，这里要在路径的后边加上文件名
 
-A user-defined trajectory can be specified in either a CSV file, which contains 
-the Earth-centered Earth-fixed (ECEF) user positions, or an NMEA GGA stream.
-The sampling rate of the user motion has to be 10Hz.
-The user is also able to assign a static location directly through the command line.
+等待执行上述命令，执行结束后，你会发现你的文件夹中多了一个gpssim.bin文件，这个文件保存的就是我们模拟生成的GPS数据。
 
-The user specifies the GPS satellite constellation through a GPS broadcast 
-ephemeris file. The daily GPS broadcast ephemeris file (brdc) is a merge of the
-individual site navigation files into one. The archive for the daily file can 
-be downloaded from: https://cddis.nasa.gov/archive/gnss/data/daily/. Access 
-to this site requires registration, which is free.
-
-These files are then used to generate the simulated pseudorange and
-Doppler for the GPS satellites in view. This simulated range data is 
-then used to generate the digitized I/Q samples for the GPS signal.
-
-The bladeRF and ADALM-Pluto command line interface requires I/Q pairs stored as signed 
-16-bit integers, while the hackrf_transfer and gps-sdr-sim-uhd.py
-support signed bytes.
-
-HackRF, bladeRF and ADALM-Pluto can accept the default sample rate of 2.6MHz, 
-while the USRP2 requires an even integral decimator of 100 MHz, i.e. 2.5MHz.
-
-The simulation start time can be specified if the corresponding set of ephemerides
-is available. Otherwise the first time of ephemeris in the RINEX navigation file
-is selected.
-
-The maximum simulation duration time is defined by USER_MOTION_SIZE to 
-prevent the output file from getting too large.
-
-The output file size can be reduced by using "-b 1" option to store 
-four 1-bit I/Q samples into a single byte. 
-You can use [bladeplayer](https://github.com/osqzss/gps-sdr-sim/tree/master/player)
-for bladeRF to playback the compressed file.
+# 发送gps数据
 
 ```
-Usage: gps-sdr-sim [options]
-Options:
-  -e <gps_nav>     RINEX navigation file for GPS ephemerides (required)
-  -u <user_motion> User motion file in ECEF x, y, z format (dynamic mode)
-  -x <user_motion> User motion file in lat, lon, height format (dynamic mode)
-  -g <nmea_gga>    NMEA GGA stream (dynamic mode)
-  -c <location>    ECEF X,Y,Z in meters (static mode) e.g. 3967283.15,1022538.18,4872414.48
-  -l <location>    Lat,Lon,Hgt (static mode) e.g. 30.286502,120.032669,100
-  -L <wnslf,dn,dtslf> User leap future event in GPS week number, day number, next leap second e.g. 2347,3,19
-  -t <date,time>   Scenario start time YYYY/MM/DD,hh:mm:ss
-  -T <date,time>   Overwrite TOC and TOE to scenario start time
-  -d <duration>    Duration [sec] (dynamic mode max: 300 static mode max: 86400)
-  -o <output>      I/Q sampling data file (default: gpssim.bin ; use - for stdout)
-  -s <frequency>   Sampling frequency [Hz] (default: 2600000)
-  -b <iq_bits>     I/Q data format [1/8/16] (default: 16)
-  -i               Disable ionospheric delay for spacecraft scenario
-  -p [fixed_gain]  Disable path loss and hold power level constant
-  -v               Show details about simulated channels
+hackrf_transfer -t gpssim.bin -f 1575420000 -s 2600000 -a 1 -x 0 -R
 ```
 
-The user motion can be specified in either dynamic or static mode:
+指定GPS数据，指定频率为1575420000 即民用GPS L1波段频率，指定采样速率2.6Msps，开启天线增益，指定TX VGA(IF)为0(为了限制影响范围，最大为47慎用！！！)，最后开启重复发射数据功能。
 
-```
-> gps-sdr-sim -e brdc3540.14n -u circle.csv
-```
-
-```
-> gps-sdr-sim -e brdc3540.14n -x circle_llh.csv
-```
-
-```
-> gps-sdr-sim -e brdc3540.14n -g triumphv3.txt
-```
-
-```
-> gps-sdr-sim -e brdc3540.14n -l 30.286502,120.032669,100
-```
-
-### Transmitting the samples
-
-The TX port of a particular SDR platform is connected to the GPS receiver 
-under test through a DC block and a fixed 50-60dB attenuator.
-
-#### BladeRF:
-
-The simulated GPS signal file, named "gpssim.bin", can be loaded
-into the bladeRF for playback as shown below:
-
-```
-set frequency 1575.42M
-set samplerate 2.6M
-set bandwidth 2.5M
-set txvga1 -25
-cal lms
-cal dc tx
-tx config file=gpssim.bin format=bin
-tx start
-```
-
-You can also execute these commands via the `bladeRF-cli` script option as below:
-```
-> bladeRF-cli -s bladerf.script
-```
-
-#### HackRF:
-
-The output data have to be 8-bit signed I/Q samples.
-```
-> gps-sdr-sim -e brdc0010.22n -b 8
-```
-You can use `hackrf_transfer` tool in the HackRF host software. 
-
-```
-> hackrf_transfer -t gpssim.bin -f 1575420000 -s 2600000 -a 1 -x 0
-```
-
-#### UHD supported devices (tested with USRP2 only):
-
-```
-> gps-sdr-sim-uhd.py -t gpssim.bin -s 2500000 -x 0
-```
-
-You can also use `tx_samples_from_file` tool included in the UHD examples:
-```
-> tx_samples_from_file --file gpssim.bin --type short --rate 2500000 --freq 1575420000 --gain 0
-```
-
-#### LimeSDR (in case of 1 Msps 1-bit file, to get full BaseBand dynamic and low RF power):
-
-```
-> limeplayer -s 1000000 -b 1 -d 2047 -g 0.1 < ../circle.1b.1M.bin
-```
-
-#### ADALM-Pluto (PlutoSDR):
-
-The ADALM-Pluto device is expected to have its network interface up and running and is accessible
-via "pluto.local" by default.
-
-Default settings:
-```
-> plutoplayer -t gpssim.bin
-```
-Set TX attenuation:
-```
-> plutoplayer -t gpssim.bin -a -30.0
-```
-Default -20.0dB. Applicable range 0.0dB to -80.0dB in 0.25dB steps.
-
-Set RF bandwidth:
-```
-> plutoplayer -t gpssim.bin -b 3.0
-```
-Default 3.0MHz. Applicable range 1.0MHz to 5.0MHz.
-
-### License
-
-Copyright &copy; 2015-2025 Takuji Ebinuma  
-Distributed under the [MIT License](http://www.opensource.org/licenses/mit-license.php).
+现在GPS信号就正常发送了。
