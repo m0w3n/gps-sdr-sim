@@ -1,3 +1,14 @@
+# 项目说明
+
+1. 修改默认3000的采样为30000，支持更长时间的GPS数据生成。
+
+2. 对两步路导出的GPX和KML（轨迹）文件解析为csv，并按照 0.2s 的间隔自动补全数据。
+
+    ```
+    python3 gpxTransform.py -f 泰山.gpx -o 泰山_gpx.csv
+    python3 gpxTransform.py -f 泰山.kml -o 泰山_kml.csv
+    ```
+
 # 环境搭建
 
 ubuntu 22.04
@@ -29,12 +40,19 @@ gcc gpssim.c -lm -O3 -o gps-sdr-sim
 
 # 星历下载
 
-进入武大IGS中心：[武汉大学IGS数据中心 (gnsswhu.cn)](http://www.igs.gnsswhu.cn/index.php)，选择广播星历，选择一个日期区间就可以下载；天数越大越近。下载N文件：brdc0970.25n.gz
+进入武大IGS中心：[武汉大学IGS数据中心 (gnsswhu.cn)](http://www.igs.gnsswhu.cn/index.php)，选择广播星历，选择一个日期区间就可以下载；天数越大越近。下载N文件：brdc0970.25n.gz，解压后 brdc0970.25n 。
 
 - 097天
 - 25年
 
-# 生成GPS数据
+# 生成动态或静态 HackRF IQ 样本
+
+| 命令                                                         | 介绍                                                         |
+| :----------------------------------------------------------- | :----------------------------------------------------------- |
+| gps-sdr-sim -e brdc0970.25n -b 8 -u circle.csv               | User motion file in ECEF x, y, z format (dynamic mode)       |
+| gps-sdr-sim -e brdc0970.25n  -b 8 -x circle_llh.csv          | User motion file in lat, lon, height format (dynamic mode)<br>纬度、经度、高度，动态GPS数据，表格的第一列是 0.1S<br>[使用我的动作文件时出错 ·问题 #301 ·OSQZSS/GPS-SDR-SIM 网关](https://github.com/osqzss/gps-sdr-sim/issues/301)，确保加速度平稳 |
+| gps-sdr-sim -e brdc0970.25n  -b 8 -g triumphv3.txt           | NMEA GGA stream (dynamic mode)                               |
+| gps-sdr-sim -e brdc0970.25n  -b 8 -l 30.286502,120.032669,100 | Lat,Lon,Hgt (static mode) e.g. 30.286502,120.032669,100<br>纬度、经度、高度，静态GPS数据 |
 
 准备一个想要模拟的经纬度，如：115.870908,28.736908（华东交大理学院）
 
@@ -49,6 +67,8 @@ https://tool.lu/coordinate/、http://api.map.baidu.com/lbsapi/getpoint/index.htm
 ./gps-sdr-sim -e brdc0970.25n -l 28.736908,115.870908,100 -b 8 -o ./gpssim.bin
 # 动态欺骗，绕圈点
 ./gps-sdr-sim -e brdc0970.25n -x circle_ecjtu.csv -b 8 -o ./gpssim_circle_ecjtu.bin
+# 两步路轨迹模拟
+./gps-sdr-sim -e brdc0970.25n -x 泰山_kml.csv -b 8 -o ./gpssim_泰山_kml.bin
 ```
 
 - -e：指定RINEX格式GPS导航电文文件
