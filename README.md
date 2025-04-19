@@ -60,6 +60,8 @@ gcc gpssim.c -lm -O3 -o gps-sdr-sim
 
 https://tool.lu/coordinate/、http://api.map.baidu.com/lbsapi/getpoint/index.html
 
+轨迹生成网站：[NMEA Generator](https://nmeagen.org/)
+
 输入命令（如果出现段错误，多试几次）：
 
 ```
